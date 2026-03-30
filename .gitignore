@@ -167,3 +167,5 @@ __pycache__/
 .zed/
 godot-cpp/
 test-data/
+3d_build_profile.json
+2d_build_profile.json
