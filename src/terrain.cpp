@@ -1,0 +1,114 @@
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
+#include "terrain.hpp" 
+//#include "godot_cpp/variant/utility_functions.hpp"
+#include <godot_cpp/classes/rendering_device.hpp>
+#include <godot_cpp/classes/random_number_generator.hpp>
+#include <godot_cpp/classes/resource.hpp>
+#include <godot_cpp/core/class_db.hpp>
+
+#include <godot_cpp/classes/object.hpp> 
+#include <godot_cpp/core/print_string.hpp>
+
+#include <godot_cpp/classes/node3d.hpp>
+
+#include <iostream>
+#include <fstream>
+#include <string>
+//#include <filesystem>
+
+using namespace godot;
+
+Terrain::Terrain() { }
+Terrain::~Terrain() { }
+
+int Terrain::get_json_int_value(const std::string& json_str, const std::string& key) const {
+    // 1. Look for the key wrapped in quotes (e.g., "width")
+    std::string search_key = "\"" + key + "\"";
+    size_t key_pos = json_str.find(search_key);
+    
+    if (key_pos == std::string::npos) {
+        return -1; // Key not found
+    }
+
+    // 2. Find the colon after the key
+    size_t colon_pos = json_str.find(":", key_pos);
+    if (colon_pos == std::string::npos) return -1;
+
+    // 3. Find the first digit of the number after the colon
+    size_t start_pos = json_str.find_first_of("0123456789-", colon_pos);
+    if (start_pos == std::string::npos) return -1;
+
+    // 4. Find where the number ends (space, comma, or closing brace)
+    size_t end_pos = json_str.find_first_of(" ,\n\r}", start_pos);
+    
+    // 5. Extract the substring and convert to an integer
+    std::string value_str = json_str.substr(start_pos, end_pos - start_pos);
+    return std::stoi(value_str);
+}
+
+int Terrain::load_simple_manifest(const std::string& absolute_path,bool is_width) const //return width if is_width == true
+{
+
+    std::ifstream file(absolute_path, std::ios::in | std::ios::binary | std::ios::ate);
+    if (!file.is_open()) print_error("Failed to open file");
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::string json_content(size, ' ');
+    file.read(&json_content[0], size);
+    file.close();
+
+    // Extract your two NEW values directly based on the new keys!
+    int width = get_json_int_value(json_content, "width");
+    int total_chunks = get_json_int_value(json_content, "total_chunks");
+
+    std::cout << "Vertex-HGT: Width = " << width << ", Total Chunks = " << total_chunks << std::endl;
+
+    if (is_width) return width;
+    else return total_chunks;
+    
+    
+}
+
+void Terrain::load_chunks()
+{
+    terrain_width = load_simple_manifest(absolute_path.utf8().get_data(), true);
+    max_chunk_count = load_simple_manifest(absolute_path.utf8().get_data(), false);
+    print_line(max_chunk_count);
+    print_line(terrain_width);
+
+}
+
+
+void Terrain::_notification(int p_what) {
+    switch (p_what) {
+        case NOTIFICATION_POST_ENTER_TREE:
+            // Enable internal physics processing
+			
+            set_physics_process_internal(true);
+            break;
+
+        case NOTIFICATION_INTERNAL_PHYSICS_PROCESS: {
+            // High-performance logic here
+            // 1. Calculate what the chunk coordinates SHOULD be based on current position
+            int target_chunk_x = floor((play_x + 32.0 ) / 64.0);
+            int target_chunk_z = floor((play_z + 32.0) / 64.0);
+
+            // 2. Check if that differs from the CURRENT chunk coordinates
+            if (target_chunk_x != chunk_x || target_chunk_z != chunk_z) 
+            {
+                chunk_x = target_chunk_x;
+                chunk_z = target_chunk_z;
+                load_chunks();
+            }
+        } break;
+    }
+}

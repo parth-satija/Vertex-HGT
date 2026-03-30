@@ -161,3 +161,8 @@ nbdist/
 *.orig
 *.old
 *.log
+
+#stuff added by me
+__pycache__/
+.zed/
+godot-cpp/
