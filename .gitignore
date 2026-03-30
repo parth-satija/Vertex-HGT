@@ -166,3 +166,4 @@ nbdist/
 __pycache__/
 .zed/
 godot-cpp/
+test-data/
