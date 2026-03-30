@@ -52,7 +52,7 @@ int Terrain::get_json_int_value(const std::string& json_str, const std::string& 
     std::string value_str = json_str.substr(start_pos, end_pos - start_pos);
     return std::stoi(value_str);
 }
-
+//this comment is here
 int Terrain::load_simple_manifest(const std::string& absolute_path,bool is_width) const //return width if is_width == true
 {
 
