@@ -1702,15 +1702,6 @@ while running:
         clamp_view()
 
 
-#    if state == STATE_EDITOR:
-#        canvas_w = min(int(terrain_w * zoom), WINDOW_W - 2 * CANVAS_PADDING)
-#        canvas_h = min(int(terrain_h * zoom), WINDOW_H - 2 * CANVAS_PADDING)
-#
-#        canvas_x = UI_PANEL_W + CANVAS_PADDING
-#        #canvas_w = usable_w
-#        canvas_y = CANVAS_PADDING
-
-
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
