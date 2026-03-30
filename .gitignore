@@ -166,7 +166,7 @@ nbdist/
 __pycache__/
 .zed/
 godot-cpp/
-test-data/
+test_data/
 3d_build_profile.json
 2d_build_profile.json
 .vscode/

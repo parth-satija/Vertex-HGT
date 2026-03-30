@@ -22,6 +22,7 @@ pygame.display.set_allow_screensaver(False)
 WINDOW_W, WINDOW_H = 1600, 900
 FONT = pygame.font.SysFont("consolas", 24)
 SMALL_FONT = pygame.font.SysFont("consolas", 18)
+TITLE_FONT = pygame.font.SysFont("consolas", 64)
 
 UI_PANEL_W = 260
 UI_PADDING = 16
@@ -547,8 +548,8 @@ def load_terrain_from_project(project_path):
                 chunk_h = CHUNK_EXTRACT_SIZE
                 chunk_w = CHUNK_EXTRACT_SIZE
                 
-                raw_data = f.read(chunk_w * chunk_h)
-                chunk_data = np.frombuffer(raw_data, dtype=np.uint8).reshape((chunk_h, chunk_w))
+                raw_data = f.read(chunk_w * chunk_h * 2)
+                chunk_data = np.frombuffer(raw_data, dtype=np.uint16).reshape((chunk_h, chunk_w))
                 chunks[(cx, cy)] = chunk_data
         except (ValueError, IndexError, struct.error) as e:
             print(f"Warning: Could not read or parse chunk file '{filename}': {e}")
@@ -561,7 +562,7 @@ def load_terrain_from_project(project_path):
     terrain_w = (max_cx + 1) * CHUNK_EXTRACT_SIZE
     terrain_h = (max_cy + 1) * CHUNK_EXTRACT_SIZE
 
-    new_terrain = np.zeros((terrain_h, terrain_w, 4), dtype=np.uint8)
+    new_terrain = np.zeros((terrain_h, terrain_w, 4), dtype=np.uint16)
 
     for (cx, cy), chunk_data in chunks.items():
         x0 = cx * CHUNK_EXTRACT_SIZE
@@ -576,7 +577,7 @@ def load_terrain_from_project(project_path):
     return new_terrain
 
 def create_new_terrain(w, h):
-    data = np.zeros((h, w, 4), dtype=np.uint8)
+    data = np.zeros((h, w, 4), dtype=np.uint16)
     data[:, :, 3] = base_height
     chunk_surfaces.clear()
 
@@ -591,7 +592,7 @@ def create_new_terrain(w, h):
 def load_terrain(path):
     global terrain_w, terrain_h
     img = Image.open(path).convert("RGBA")
-    arr = np.array(img)
+    arr = np.array(img).astype(np.uint16)
     
     # Update global dimensions based on the new image
     terrain_h, terrain_w = arr.shape[:2]
@@ -630,11 +631,11 @@ void main() {
     vec2 uv = (chunkOffset + localPos + 0.5) / texSize;
     
     // Sample neighbors
-    float hc = texture2D(terrainTex, uv).a * 255.0;
-    float hl = texture2D(terrainTex, uv + vec2(-onePixel.x, 0.0)).a * 255.0;
-    float hr = texture2D(terrainTex, uv + vec2( +onePixel.x, 0.0)).a * 255.0;
-    float hd = texture2D(terrainTex, uv + vec2(0.0, -onePixel.y)).a * 255.0;
-    float hu = texture2D(terrainTex, uv + vec2(0.0,  +onePixel.y)).a * 255.0;
+    float hc = texture2D(terrainTex, uv).a * 65535.0;
+    float hl = texture2D(terrainTex, uv + vec2(-onePixel.x, 0.0)).a * 65535.0;
+    float hr = texture2D(terrainTex, uv + vec2( +onePixel.x, 0.0)).a * 65535.0;
+    float hd = texture2D(terrainTex, uv + vec2(0.0, -onePixel.y)).a * 65535.0;
+    float hu = texture2D(terrainTex, uv + vec2(0.0,  +onePixel.y)).a * 65535.0;
     
     // Calculate internal angles
     // X-axis angle (Center to Left, Center to Right)
@@ -731,7 +732,7 @@ def save_terrain(base_path, terrain_full_res):
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
         
         # Upload full terrain (RGBA)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, current_w, current_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, terrain_full_res.tobytes())
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, current_w, current_h, 0, GL_RGBA, GL_UNSIGNED_SHORT, terrain_full_res.tobytes())
 
         # Setup FBO
         fbo = glGenFramebuffers(1)
@@ -818,7 +819,7 @@ def get_chunk_alpha_data(terrain_data, cx, cy):
     
     actual_h, actual_w = partial_data.shape
     if actual_h < CHUNK_EXTRACT_SIZE or actual_w < CHUNK_EXTRACT_SIZE:
-        padded_chunk = np.zeros((CHUNK_EXTRACT_SIZE, CHUNK_EXTRACT_SIZE), dtype=np.uint8)
+        padded_chunk = np.zeros((CHUNK_EXTRACT_SIZE, CHUNK_EXTRACT_SIZE), dtype=np.uint16)
         padded_chunk[0:actual_h, 0:actual_w] = partial_data
         return padded_chunk.ravel()
 
@@ -892,8 +893,11 @@ def clamp_view():
 def terrain_to_surface(terrain):
     # Invert height for display:
     # 0 (highest) → white
-    # 255 (lowest) → black
-    alpha = 255 - terrain[:, :, 3].astype(np.uint8)
+    # 65535 (lowest) → black
+    alpha = 65535 - terrain[:, :, 3].astype(np.uint16)
+    # 0 (lowest) → black, 65535 (highest) → white
+    # Map 16-bit (0-65535) to 8-bit (0-255) for visual display
+    alpha = (terrain[:, :, 3] >> 8).astype(np.uint8)
 
     surface = pygame.Surface((alpha.shape[1], alpha.shape[0]))
     rgb = np.dstack((alpha, alpha, alpha))
@@ -912,6 +916,8 @@ def rebuild_chunk(cx, cy):
 
     # Note: 255 - X handles the "darkness is lightness" inversion you requested earlier
     # Ensure this logic matches your desired visual style
+    # Use signed 32-bit math and clipping to prevent wrapping when height > 255
+    # This makes anything >= 255 render as black (0)
     
     if paint_mode == MODE_OVERHANG:
         # Render R and G channels
@@ -919,17 +925,23 @@ def rebuild_chunk(cx, cy):
         # Here we show both so you can see the "overhang map"
         pixels[:, :, 0] = (255 - data[:, :, 1]).T # Red channel
         pixels[:, :, 1] = (255 - data[:, :, 0]).T # Green channel
+        # Use clip to ensure values > 255 don't wrap to white
+        pixels[:, :, 0] = np.clip(255 - data[:, :, 1].astype(np.int32), 0, 255).T # Red channel
+        pixels[:, :, 1] = np.clip(255 - data[:, :, 0].astype(np.int32), 0, 255).T # Green channel
         pixels[:, :, 2] = 255                     # Keep B high for white background
     elif paint_mode == MODE_BLOCK:
         # Fix: Ensure the B channel (index 2) is mapped to the RGB surface
         # We render it as a Cyan/Blue tint to distinguish it from height
         b_chan = (255 - data[:, :, 2]).T
+        b_chan = np.clip(255 - data[:, :, 2].astype(np.int32), 0, 255).T
         pixels[:, :, 0] = 255 # White background
         pixels[:, :, 1] = b_chan
         pixels[:, :, 2] = b_chan
     else:
         # Default Height (Alpha/Channel 3)
         h_chan = (255 - data[:, :, 3]).T
+        # Logic: 255 (White) at height 0, 0 (Black) at height 255+.
+        h_chan = np.clip(255 - data[:, :, 3].astype(np.int32), 0, 255).T
         pixels[:, :, 0] = h_chan
         pixels[:, :, 1] = h_chan
         pixels[:, :, 2] = h_chan
@@ -1359,9 +1371,9 @@ def apply_height_brush(tx, ty, paint_direction, procedural=False):
         else:
             working_channel[mask] = np.minimum(working_channel[mask], proposed[mask])
 
-    # Finalize values: Clip and cast back to uint8
-    np.clip(working_channel, 0, 255, out=working_channel)
-    terrain[y0:y1, x0:x1, target_channel] = working_channel.astype(np.uint8)
+    # Finalize values: Clip and cast back to uint16
+    np.clip(working_channel, 0, 65535, out=working_channel)
+    terrain[y0:y1, x0:x1, target_channel] = working_channel.astype(np.uint16)
 
     # Mark global terrain as dirty for saving/processing
     global terrain_dirty
@@ -1647,7 +1659,7 @@ layout_ui()
 
 # ---------------- MAIN LOOP ----------------
 screen = pygame.display.set_mode((WINDOW_W, WINDOW_H), pygame.RESIZABLE)
-pygame.display.set_caption("DeterTerra")
+pygame.display.set_caption("Vertex HGT Editor")
 try:
     pygame.display.set_icon(pygame.image.load("terrain_tools.ico"))
 except Exception:
@@ -1953,10 +1965,10 @@ while running:
                         brush_power = max(0.1, min(10.0, value))
 
                     elif active_input == "max":
-                        max_height = int(max(0.1, min(255.0, value)))
+                        max_height = int(max(0.1, min(65535.0, value)))
 
                     elif active_input == "min":
-                        min_height = int(max(0.1, min(255.0, value)))
+                        min_height = int(max(0.1, min(65535.0, value)))
 
                     elif active_input == "seed":
                         seed = int(max(0.1, min(100000000000, value)))
@@ -2059,7 +2071,7 @@ while running:
         iso_preview.render(screen, terrain)
     else: 
         if state == STATE_MENU:
-            title = FONT.render("Gol Gappa's Terrain Map Tools", True, WHITE)
+            title = TITLE_FONT.render("Vertex-HGT", True, WHITE)
             screen.blit(title, title.get_rect(center=(WINDOW_W // 2, 140)))
 
             draw_button(btn_create, "Create New")
@@ -2136,7 +2148,7 @@ while running:
                     terrain_w = int(input_w_text)
                     terrain_h = int(input_h_text)
                     base_height = int(input_base_text)
-                    base_height = max(0, min(255, base_height))
+                    base_height = max(0, min(65535, base_height))
                     beach_offset = int(input_offset_text)
                     beach_offset = max(0, min(min(terrain_w, terrain_h)/2, beach_offset))
                     terrain = create_new_terrain(terrain_w, terrain_h)
