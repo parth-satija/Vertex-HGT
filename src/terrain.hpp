@@ -91,4 +91,6 @@ public:
 
 	int get_json_int_value(const std::string& json_str, const std::string& key) const;
 	int load_simple_manifest(const std::string& absolute_path, bool is_width) const;
+
+	bool check_direct_storage_support() const;
 };

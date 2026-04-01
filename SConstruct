@@ -94,6 +94,16 @@ env.Append(CPPPATH=include_dirs)
 # Find all .cpp files recursively in the specified source directories
 sources = find_sources(source_dirs, source_exts)
 
+# Tell SCons where the dstorage.h is
+env.Append(CPPPATH=["#/include"])
+
+# Tell SCons where the dstorage.lib is
+env.Append(LIBPATH=["#/lib"])
+
+# Tell it to link the library
+if env["platform"] == "windows":
+    env.Append(LIBS=["dstorage"])
+
 # Handle documentation generation if applicable
 if env.get("target") in ["editor", "template_debug"]:
     try:

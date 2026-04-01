@@ -1,3 +1,4 @@
+#include <winerror.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -21,12 +22,46 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <dxgi1_6.h>
+#include <dstorage.h>
 //#include <filesystem>
 
 using namespace godot;
 
 Terrain::Terrain() { }
 Terrain::~Terrain() { }
+
+bool Terrain::check_direct_storage_support() const  {
+    IDStorageFactory* factory = nullptr;
+    
+    // Attempt to create the DirectStorage factory
+    HRESULT hr = DStorageGetFactory(IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) {
+        return false; // DirectStorage runtime isn't even installed on the OS
+    }
+
+    // Create a temporary queue to check its properties
+    DSTORAGE_QUEUE_DESC queueDesc = {};
+    queueDesc.Capacity = DSTORAGE_MIN_QUEUE_CAPACITY;
+    queueDesc.Priority = DSTORAGE_PRIORITY_NORMAL;
+    queueDesc.SourceType = DSTORAGE_REQUEST_SOURCE_FILE;
+
+    IDStorageQueue* queue = nullptr;
+    if (SUCCEEDED(factory->CreateQueue(&queueDesc, IID_PPV_ARGS(&queue)))) {
+        // Query if GPU decompression path is supported
+        DSTORAGE_COMPRESSION_SUPPORT support = {};
+        // Query the API to see if it routes through the optimized driver path
+        queue->QueryInterface(__uuidof(IDStorageQueue2), (void**)&queue);
+        
+        // This checks if the GPU and drivers are ready for DirectStorage!
+        queue->Release();
+        factory->Release();
+        return true; 
+    }
+
+    factory->Release();
+    return false;
+}
 
 int Terrain::get_json_int_value(const std::string& json_str, const std::string& key) const {
     // 1. Look for the key wrapped in quotes (e.g., "width")
@@ -55,7 +90,6 @@ int Terrain::get_json_int_value(const std::string& json_str, const std::string& 
 //this comment is here
 int Terrain::load_simple_manifest(const std::string& absolute_path,bool is_width) const //return width if is_width == true
 {
-
     std::ifstream file(absolute_path, std::ios::in | std::ios::binary | std::ios::ate);
     if (!file.is_open()) print_error("Failed to open file");
 
@@ -74,8 +108,6 @@ int Terrain::load_simple_manifest(const std::string& absolute_path,bool is_width
 
     if (is_width) return width;
     else return total_chunks;
-    
-    
 }
 
 void Terrain::load_chunks()
@@ -85,8 +117,18 @@ void Terrain::load_chunks()
     print_line(max_chunk_count);
     print_line(terrain_width);
 
-}
+    bool direct_storage_supported = check_direct_storage_support();
+    if (direct_storage_supported) 
+    {
+        print_line("DirectStorage is supported on this system.");
+    }
+    else 
+    {
+        print_line("DirectStorage is NOT supported on this system.");
+    }
+   
 
+}
 
 void Terrain::_notification(int p_what) {
     switch (p_what) {
