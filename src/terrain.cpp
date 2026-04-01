@@ -24,6 +24,7 @@
 #include <string>
 #include <dxgi1_6.h>
 #include <dstorage.h>
+#include <vector>
 //#include <filesystem>
 
 using namespace godot;
@@ -61,6 +62,66 @@ bool Terrain::check_direct_storage_support() const  {
 
     factory->Release();
     return false;
+}
+
+int Terrain::check_dual_gpu_setup() const {
+    IDXGIFactory6* factory = nullptr;
+    // Create the DXGI Factory to scan hardware
+    HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory6), (void**)&factory);
+    
+    if (FAILED(hr)) {
+        print_line("DXGI Factory failed to initialize.");
+        return false;
+    }
+
+    bool found_igpu = false;
+    bool found_dgpu = false;
+    IDXGIAdapter1* adapter = nullptr;
+    UINT i = 0;
+
+    // Loop through all available GPUs on the system
+    while (factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND) {
+        DXGI_ADAPTER_DESC1 desc;
+        adapter->GetDesc1(&desc);
+
+        // Ignore software/emulated renderers (like Microsoft Basic Render Driver)
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+            adapter->Release();
+            i++;
+            continue;
+        }
+
+        // Convert the wide-character GPU name to a Godot String for logging
+        String gpu_name = String(desc.Description);
+        
+        // Rule of thumb: If it has more than 512MB of dedicated VRAM, it's a dGPU
+        // (iGPUs report 0 or very low dedicated VRAM because they share system RAM)
+        if (desc.DedicatedVideoMemory > 512 * 1024 * 1024) { 
+            found_dgpu = true;
+            print_line("Detected dGPU: " + gpu_name);
+        } else {
+            found_igpu = true;
+            print_line("Detected iGPU: " + gpu_name);
+        }
+
+        adapter->Release();
+        i++;
+    }
+
+    factory->Release();
+
+    // Print out the final diagnosis
+    if (found_igpu && found_dgpu) {
+        return 1;
+    } else if (found_dgpu) {
+        print_line("Detected only a dedicated GPU.");
+        return 2;
+    } else if (found_igpu) {
+        print_line("Detected only an integrated GPU.");
+        return 3;
+    }
+
+    return 0;
 }
 
 int Terrain::get_json_int_value(const std::string& json_str, const std::string& key) const {
@@ -125,9 +186,15 @@ void Terrain::load_chunks()
     else 
     {
         print_line("DirectStorage is NOT supported on this system.");
-    }
-   
-
+        int dual_gpu_setup = check_dual_gpu_setup();
+        if (dual_gpu_setup == 1)    {
+            print_line("Hybrid multi-GPU setup detected!");
+        } else if (dual_gpu_setup == 2) {
+            print_line("Only a dedicated GPU detected.");
+        } else if (dual_gpu_setup == 3) {
+            print_line("Only an integrated GPU detected.");
+        }
+    }  
 }
 
 void Terrain::_notification(int p_what) {

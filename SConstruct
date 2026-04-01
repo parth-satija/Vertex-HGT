@@ -102,7 +102,7 @@ env.Append(LIBPATH=["#/lib"])
 
 # Tell it to link the library
 if env["platform"] == "windows":
-    env.Append(LIBS=["dstorage"])
+    env.Append(LIBS=["dstorage", "dxgi"])
 
 # Handle documentation generation if applicable
 if env.get("target") in ["editor", "template_debug"]:

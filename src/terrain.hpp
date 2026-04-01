@@ -93,4 +93,5 @@ public:
 	int load_simple_manifest(const std::string& absolute_path, bool is_width) const;
 
 	bool check_direct_storage_support() const;
+	int check_dual_gpu_setup() const;
 };
