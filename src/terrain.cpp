@@ -20,17 +20,86 @@
 #include <godot_cpp/classes/node3d.hpp>
 
 #include <iostream>
+#include <algorithm>
 #include <fstream>
 #include <string>
 #include <dxgi1_6.h>
 #include <dstorage.h>
 #include <vector>
-//#include <filesystem>
 
 using namespace godot;
 
 Terrain::Terrain() { }
 Terrain::~Terrain() { }
+
+void Terrain::set_render_dis(int p_render_dis) {
+    if (render_dis != p_render_dis) {
+        render_dis = p_render_dis;
+        update_render_templates();
+    }
+}
+
+void Terrain::update_render_templates() {
+    full_circle_template.clear();
+    north_template.clear();
+    east_template.clear();
+    ne_template.clear();
+    nw_template.clear();
+
+    // Ensure we have a valid width to calculate 1D offsets
+    if (terrain_width <= 0) return;
+
+    int64_t r2 = (int64_t)render_dis * render_dis;
+    int64_t W = (int64_t)terrain_width;
+
+    auto is_inside = [r2](int x, int z) {
+        return ((int64_t)x * x + (int64_t)z * z) <= r2;
+    };
+
+    // Temporary storage to allow sorting the full circle by distance
+    struct OffsetPair { int x, z; int64_t dist_sq; };
+	vector<OffsetPair> circle_pairs;
+
+    // Iterate through the bounding box of the circle
+    for (int z = -render_dis; z <= render_dis; z++) {
+        for (int x = -render_dis; x <= render_dis; x++) {
+            if (!is_inside(x, z)) continue;
+
+            int64_t offset = (int64_t)z * W + x;
+
+            // 1. Collect for Full Circle
+            circle_pairs.push_back({x, z, (int64_t)x * x + (int64_t)z * z});
+
+            // 2. Directional Templates (Leading Edges) using 1D offsets
+            // North (dZ = -1): New if outside when shifted back to old center (0, 1)
+            if (!is_inside(x, z + 1)) {
+                north_template.push_back(offset);
+            }
+            // East (dX = 1): New if outside when shifted back to old center (-1, 0)
+            if (!is_inside(x - 1, z)) {
+                east_template.push_back(offset);
+            }
+            // North-East (dX = 1, dZ = -1): Old center was at (-1, 1)
+            if (!is_inside(x - 1, z + 1)) {
+                ne_template.push_back(offset);
+            }
+            // North-West (dX = -1, dZ = -1): Old center was at (1, 1)
+            if (!is_inside(x + 1, z + 1)) {
+                nw_template.push_back(offset);
+            }
+        }
+    }
+
+    // Sort full circle by distance (closest first) then convert to 1D offsets
+    std::sort(circle_pairs.begin(), circle_pairs.end(), [](const OffsetPair& a, const OffsetPair& b) {
+        return a.dist_sq < b.dist_sq;
+    });
+    for (const auto& p : circle_pairs) {
+        full_circle_template.push_back((int64_t)p.z * W + p.x);
+    }
+
+    print_line("Terrain templates updated. Full circle size: " + String::num_uint64(full_circle_template.size()));
+}
 
 bool Terrain::check_direct_storage_support() const  {
     IDStorageFactory* factory = nullptr;
@@ -195,6 +264,12 @@ void Terrain::load_chunks()
             print_line("Only an integrated GPU detected.");
         }
     }  
+    update_render_templates();
+    print_line(north_template.size());
+    for (int i = 0; i < north_template.size(); i++) {
+        print_line(north_template[i]);
+    }
+    
 }
 
 void Terrain::_notification(int p_what) {

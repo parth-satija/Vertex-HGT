@@ -4,11 +4,11 @@
 #include "godot_cpp/variant/vector2i.hpp"
 #include <godot_cpp/classes/node3d.hpp>
 
-//#include <iostream>
-//#include <fstream>
 #include <string>
+#include <vector>
 
 using namespace godot;
+using namespace std;
 
 class Terrain : public Node3D { 
 	GDCLASS(Terrain, Node3D);
@@ -49,22 +49,22 @@ protected:
 
 		ClassDB::bind_method(godot::D_METHOD("get_max_chunk_count"), &Terrain::get_max_chunk_count);
         ClassDB::bind_method(godot::D_METHOD("set_max_chunk_count", "p_max_chunk_count"), &Terrain::set_max_chunk_count);
-        ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::FLOAT, "max_chunk_count"), "set_max_chunk_count", "get_max_chunk_count");
+        ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::INT, "max_chunk_count"), "set_max_chunk_count", "get_max_chunk_count");
 
 		ClassDB::bind_method(godot::D_METHOD("get_terrain_width"), &Terrain::get_terrain_width);
         ClassDB::bind_method(godot::D_METHOD("set_terrain_width", "p_terrain_width"), &Terrain::set_terrain_width);
-        ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::FLOAT, "terrain_width"), "set_terrain_width", "get_terrain_width");
+        ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::INT, "terrain_width"), "set_terrain_width", "get_terrain_width");
 
 		ClassDB::bind_method(godot::D_METHOD("get_render_dis"), &Terrain::get_render_dis);
         ClassDB::bind_method(godot::D_METHOD("set_render_dis", "p_render_dis"), &Terrain::set_render_dis);
-        ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::FLOAT, "render_dis"), "set_render_dis", "get_render_dis");
+        ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::INT, "render_dis"), "set_render_dis", "get_render_dis");
 
 		ClassDB::bind_method(godot::D_METHOD("get_absolute_path"), &Terrain::get_absolute_path);
         ClassDB::bind_method(godot::D_METHOD("set_absolute_path", "p_absolute_path"), &Terrain::set_absolute_path);
         ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::STRING, "absolute_path"), "set_absolute_path", "get_absolute_path");
 	}
 
-public:
+public: 
 	Terrain();
 	~Terrain();
 
@@ -80,7 +80,7 @@ public:
 	void set_terrain_width(int p_terrain_width) { terrain_width = p_terrain_width; }
     int get_terrain_width() const { return terrain_width; }
 
-	void set_render_dis(int p_render_dis) { render_dis = p_render_dis; }
+	void set_render_dis(int p_render_dis);
     int get_render_dis() const { return render_dis; }
 
 	void set_absolute_path(String p_absolute_path) { absolute_path = p_absolute_path; }
@@ -94,4 +94,14 @@ public:
 
 	bool check_direct_storage_support() const;
 	int check_dual_gpu_setup() const;
+
+private:
+	// Movement templates for efficient chunk loading
+	vector<int64_t> full_circle_template;
+	vector<int64_t> north_template;
+	vector<int64_t> east_template;
+	vector<int64_t> ne_template;
+	vector<int64_t> nw_template;
+
+	void update_render_templates();
 };
