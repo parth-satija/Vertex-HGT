@@ -30,6 +30,7 @@ public:
 
 	String absolute_path;
 
+	bool using_directx = true;
 	//test comment for Git
 
 
@@ -37,7 +38,7 @@ public:
 protected:
 	static void _bind_methods()
 	{
-		ClassDB::bind_method(D_METHOD("printuuu"), &Terrain::load_chunks);
+		ClassDB::bind_method(D_METHOD("load_chunks"), &Terrain::load_chunks);
 		
 		ClassDB::bind_method(godot::D_METHOD("get_play_x"), &Terrain::get_play_x);
         ClassDB::bind_method(godot::D_METHOD("set_play_x", "p_play_x"), &Terrain::set_play_x);
@@ -62,6 +63,10 @@ protected:
 		ClassDB::bind_method(godot::D_METHOD("get_absolute_path"), &Terrain::get_absolute_path);
         ClassDB::bind_method(godot::D_METHOD("set_absolute_path", "p_absolute_path"), &Terrain::set_absolute_path);
         ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::STRING, "absolute_path"), "set_absolute_path", "get_absolute_path");
+
+		ClassDB::bind_method(godot::D_METHOD("get_using_directx"), &Terrain::get_using_directx);
+        ClassDB::bind_method(godot::D_METHOD("set_using_directx", "p_using_directx"), &Terrain::set_using_directx);
+        ClassDB::add_property("Terrain", godot::PropertyInfo(godot::Variant::BOOL, "using_directx"), "set_using_directx", "get_using_directx");
 	}
 
 public: 
@@ -82,6 +87,9 @@ public:
 
 	void set_render_dis(int p_render_dis);
     int get_render_dis() const { return render_dis; }
+
+	void set_using_directx(bool p_using_directx) { using_directx = p_using_directx; }
+    bool get_using_directx() const { return using_directx; }
 
 	void set_absolute_path(String p_absolute_path) { absolute_path = p_absolute_path; }
     String get_absolute_path() const { return absolute_path; }

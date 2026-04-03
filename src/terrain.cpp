@@ -7,14 +7,14 @@
 #include <unistd.h>
 #endif
 
-#include "terrain.hpp" 
+#include "terrain.hpp"
 //#include "godot_cpp/variant/utility_functions.hpp"
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/random_number_generator.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
-#include <godot_cpp/classes/object.hpp> 
+#include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/print_string.hpp>
 
 #include <godot_cpp/classes/node3d.hpp>
@@ -26,6 +26,9 @@
 #include <dxgi1_6.h>
 #include <dstorage.h>
 #include <vector>
+
+#include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/rendering_device.hpp>
 
 using namespace godot;
 
@@ -103,7 +106,7 @@ void Terrain::update_render_templates() {
 
 bool Terrain::check_direct_storage_support() const  {
     IDStorageFactory* factory = nullptr;
-    
+
     // Attempt to create the DirectStorage factory
     HRESULT hr = DStorageGetFactory(IID_PPV_ARGS(&factory));
     if (FAILED(hr)) {
@@ -122,11 +125,11 @@ bool Terrain::check_direct_storage_support() const  {
         DSTORAGE_COMPRESSION_SUPPORT support = {};
         // Query the API to see if it routes through the optimized driver path
         queue->QueryInterface(__uuidof(IDStorageQueue2), (void**)&queue);
-        
+
         // This checks if the GPU and drivers are ready for DirectStorage!
         queue->Release();
         factory->Release();
-        return true; 
+        return true;
     }
 
     factory->Release();
@@ -137,7 +140,7 @@ int Terrain::check_dual_gpu_setup() const {
     IDXGIFactory6* factory = nullptr;
     // Create the DXGI Factory to scan hardware
     HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory6), (void**)&factory);
-    
+
     if (FAILED(hr)) {
         print_line("DXGI Factory failed to initialize.");
         return false;
@@ -162,10 +165,10 @@ int Terrain::check_dual_gpu_setup() const {
 
         // Convert the wide-character GPU name to a Godot String for logging
         String gpu_name = String(desc.Description);
-        
+
         // Rule of thumb: If it has more than 512MB of dedicated VRAM, it's a dGPU
         // (iGPUs report 0 or very low dedicated VRAM because they share system RAM)
-        if (desc.DedicatedVideoMemory > 512 * 1024 * 1024) { 
+        if (desc.DedicatedVideoMemory > 512 * 1024 * 1024) {
             found_dgpu = true;
             print_line("Detected dGPU: " + gpu_name);
         } else {
@@ -197,7 +200,7 @@ int Terrain::get_json_int_value(const std::string& json_str, const std::string& 
     // 1. Look for the key wrapped in quotes (e.g., "width")
     std::string search_key = "\"" + key + "\"";
     size_t key_pos = json_str.find(search_key);
-    
+
     if (key_pos == std::string::npos) {
         return -1; // Key not found
     }
@@ -212,7 +215,7 @@ int Terrain::get_json_int_value(const std::string& json_str, const std::string& 
 
     // 4. Find where the number ends (space, comma, or closing brace)
     size_t end_pos = json_str.find_first_of(" ,\n\r}", start_pos);
-    
+
     // 5. Extract the substring and convert to an integer
     std::string value_str = json_str.substr(start_pos, end_pos - start_pos);
     return std::stoi(value_str);
@@ -248,11 +251,11 @@ void Terrain::load_chunks()
     print_line(terrain_width);
 
     bool direct_storage_supported = check_direct_storage_support();
-    if (direct_storage_supported) 
+    if (direct_storage_supported && using_directx)
     {
         print_line("DirectStorage is supported on this system.");
     }
-    else 
+    else
     {
         print_line("DirectStorage is NOT supported on this system.");
         int dual_gpu_setup = check_dual_gpu_setup();
@@ -263,20 +266,23 @@ void Terrain::load_chunks()
         } else if (dual_gpu_setup == 3) {
             print_line("Only an integrated GPU detected.");
         }
-    }  
+    }
     update_render_templates();
     print_line(north_template.size());
-    for (int i = 0; i < north_template.size(); i++) {
-        print_line(north_template[i]);
+    if (using_directx) {
+        print_line("Using DirectX for terrain rendering.");
+    } else {
+        print_line("Using Vulkan for terrain rendering.");
     }
-    
+
 }
+
 
 void Terrain::_notification(int p_what) {
     switch (p_what) {
         case NOTIFICATION_POST_ENTER_TREE:
             // Enable internal physics processing
-			
+
             set_physics_process_internal(true);
             break;
 
@@ -287,7 +293,7 @@ void Terrain::_notification(int p_what) {
             int target_chunk_z = floor((play_z + 32.0) / 64.0);
 
             // 2. Check if that differs from the CURRENT chunk coordinates
-            if (target_chunk_x != chunk_x || target_chunk_z != chunk_z) 
+            if (target_chunk_x != chunk_x || target_chunk_z != chunk_z)
             {
                 chunk_x = target_chunk_x;
                 chunk_z = target_chunk_z;

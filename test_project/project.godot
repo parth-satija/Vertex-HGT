@@ -22,3 +22,8 @@ config/icon="res://icon.svg"
 [dotnet]
 
 project/assembly_name="Test_Project"
+
+[rendering]
+
+rendering_device/driver.windows="d3d12"
+rendering_device/fallback_to_opengl3=false
