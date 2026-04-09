@@ -2,13 +2,20 @@
 
 #include "godot_cpp/variant/string.hpp"
 #include "godot_cpp/variant/vector2i.hpp"
+#include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 
 #include <string>
 #include <vector>
+#include <dstorage.h>
+#include <dxgi1_6.h>
+#include <wrl/client.h>
+#include <d3d12.h>
 
 using namespace godot;
 using namespace std;
+
+using Microsoft::WRL::ComPtr;
 
 class Terrain : public Node3D { 
 	GDCLASS(Terrain, Node3D);
@@ -39,6 +46,7 @@ protected:
 	static void _bind_methods()
 	{
 		ClassDB::bind_method(D_METHOD("load_chunks"), &Terrain::load_chunks);
+		ClassDB::bind_method(D_METHOD("get_template_chunks", "offset", "command"), &Terrain::get_template_chunks);
 		
 		ClassDB::bind_method(godot::D_METHOD("get_play_x"), &Terrain::get_play_x);
         ClassDB::bind_method(godot::D_METHOD("set_play_x", "p_play_x"), &Terrain::set_play_x);
@@ -95,6 +103,7 @@ public:
     String get_absolute_path() const { return absolute_path; }
 
 	void load_chunks();
+	PackedInt64Array get_template_chunks(int64_t p_offset, int p_command);
 	void _notification(int p_what);
 
 	int get_json_int_value(const std::string& json_str, const std::string& key) const;
@@ -103,13 +112,40 @@ public:
 	bool check_direct_storage_support() const;
 	int check_dual_gpu_setup() const;
 
+	bool initialize_directstorage(ID3D12Device* d3d12_device);
+
 private:
+
+	
+	bool ds_initialized = false;
+
 	// Movement templates for efficient chunk loading
 	vector<int64_t> full_circle_template;
 	vector<int64_t> north_template;
 	vector<int64_t> east_template;
 	vector<int64_t> ne_template;
 	vector<int64_t> nw_template;
+	vector<int64_t> south_template;
+    vector<int64_t> west_template;
+    vector<int64_t> sw_template;
+    vector<int64_t> se_template;
 
+	vector<int>  slot_chunk_map;
+    int          total_slots    = 0;
+
+	ComPtr<IDStorageFactory> ds_factory;
+	ComPtr<IDStorageQueue>   ds_queue;
+    ID3D12Device*     d3d12_device = nullptr;
+    ID3D12Resource*   gpu_buffer   = nullptr;
+    ID3D12Fence*      ds_fence     = nullptr;
+    UINT64            ds_fence_value = 0;
+    bool              ds_ready     = false;
+
+	bool   init_directstorage();
+    bool   create_gpu_buffer();
+    void   stream_new_chunks(const vector<int64_t>& incoming_offsets);
+    int    encode_chunk_id(int abs_x, int abs_z) const;
+    Vector2i decode_chunk_id(int chunk_id) const;
+    int    get_lod_ring(int dx, int dz) const;
 	void update_render_templates();
 };

@@ -61,7 +61,7 @@ noise_octaves = 4
 noise_persistence = 0.5
 noise_seed = 56
 
-max_height = 255
+max_height = 65535
 min_height = 0
 
 brush_power = 3.0
@@ -306,9 +306,10 @@ class IsometricPreview:
         
         # Prepare data
         heights = terrain[:, :, 3].astype(np.float32)
+        v_scale = 0.02 # Adjusted vertical scale for 16-bit range
         
         # Calculate normals
-        gy, gx = np.gradient(heights * 0.4)
+        gy, gx = np.gradient(heights * v_scale)
         norm = np.sqrt(gx**2 + gy**2 + 1.0)
         nx = -gx / norm
         ny = 1.0 / norm
@@ -332,19 +333,19 @@ class IsometricPreview:
                 
                 glColor3f(*self.get_color(h1))
                 glNormal3f(nx[y, x], ny[y, x], nz[y, x])
-                glVertex3f(x, h1 * 0.4, y)
+                glVertex3f(x, h1 * v_scale, y)
                 
                 glColor3f(*self.get_color(h2))
                 glNormal3f(nx[y + step, x], ny[y + step, x], nz[y + step, x])
-                glVertex3f(x, h2 * 0.4, y + step)
+                glVertex3f(x, h2 * v_scale, y + step)
             glEnd()
         glEndList()
 
     def get_color(self, h):
-        if h < 40: return (0.1, 0.3, 0.8)
-        if h < 50: return (0.8, 0.75, 0.55)
-        if h < 140: return (0.2, 0.55, 0.2)
-        if h < 200: return (0.45, 0.45, 0.48)
+        if h < 10000: return (0.1, 0.3, 0.8)  # Deep Water
+        if h < 12000: return (0.8, 0.75, 0.55) # Sand
+        if h < 35000: return (0.2, 0.55, 0.2)  # Grass/Forest
+        if h < 50000: return (0.45, 0.45, 0.48) # Rock
         return (0.95, 0.95, 1.0)
 
     def render(self, target_screen, terrain_data):
@@ -650,16 +651,18 @@ void main() {
     
     // Map angles to importance values
     float valX = 0.0;
-    if (angleX > 177.0) valX = 1.0;
-    else if (angleX > 170.0) valX = 2.0;
-    else if (angleX > 150.0) valX = 3.0;
-    else if (angleX <= 150.0) valX = 4.0;
+    if (angleX > 177.0) valX = 0.0;
+    else if (angleX > 170.0) valX = 1.0;
+    else if (angleX > 150.0) valX = 2.0;
+    else if (angleX > 130.0) valX = 3.0;
+    else if (angleX <= 130.0) valX = 4.0;
 
     float valY = 0.0;
-    if (angleY > 177.0) valY = 1.0;
-    else if (angleY > 170.0) valY = 2.0;
-    else if (angleY > 150.0) valY = 3.0;
-    else if (angleY <= 150.0) valY = 4.0;
+    if (angleY > 177.0) valY = 0.0;
+    else if (angleY > 170.0) valY = 1.0;
+    else if (angleY > 150.0) valY = 2.0;
+    else if (angleY > 130.0) valY = 3.0;
+    else if (angleY <= 130.0) valY = 4.0;
     
     // Combine both axes and scale for 8-bit integer output
     float finalVal = max(valX, valY);
@@ -771,6 +774,7 @@ def save_terrain(base_path, terrain_full_res):
             for cx in range(num_chunks_x):
                 chunk_index = cy * num_chunks_x + cx + 1
                 chunk_filename = f"{chunk_index}.hmap"
+                importance_filename = f"{chunk_index}.vimp"
 
                 # 1. Save Map Chunk (CPU)
                 chunk_alpha_data_1d = get_chunk_alpha_data(terrain_full_res, cx, cy)
@@ -784,7 +788,7 @@ def save_terrain(base_path, terrain_full_res):
                 glEnd()
                 
                 gpu_data = glReadPixels(0, 0, CHUNK_EXTRACT_SIZE, CHUNK_EXTRACT_SIZE, GL_RED, GL_UNSIGNED_BYTE)
-                with open(os.path.join(importance_folder, chunk_filename), 'wb') as f:
+                with open(os.path.join(importance_folder, importance_filename), 'wb') as f:
                     f.write(gpu_data)
 
         # Cleanup GL
@@ -1298,7 +1302,7 @@ def generate_terrain():
         noise = radialize_value_noise(noise, radius_frac=0.35, power=2.8)
 
         heights = max_height - noise * (max_height - min_height)
-        terrain[:, :, 3] = heights.astype(np.uint8)
+        terrain[:, :, 3] = heights.astype(np.uint16)
 
 
     elif noise_mode == NOISE_POINTS:
@@ -1358,6 +1362,7 @@ def apply_height_brush(tx, ty, paint_direction, procedural=False):
     working_channel = terrain[y0:y1, x0:x1, target_channel].astype(np.float32)
 
     # Pixel delta
+    # Scaled delta for uint16 range (5000.0 provides a good balance of speed)
     delta = brush_strength * 255.0 * paint_direction
 
     if not procedural:
@@ -2105,7 +2110,7 @@ while running:
 
         # ---------------- SIZE DIALOG ----------------
         elif state == STATE_SIZE:
-            label = FONT.render("Enter Terrain Size (pixels)", True, WHITE)
+            label = FONT.render("Enter Terrain Size (64x64 chunks)", True, WHITE)
             screen.blit(label, label.get_rect(center=(WINDOW_W // 2, 180)))
 
             draw_text_input(input_w, input_w_text, input_active == "w")
@@ -2113,8 +2118,8 @@ while running:
             draw_text_input(input_base, input_base_text, input_active == "b")
             draw_text_input(input_offset, input_offset_text, input_active == "o")
 
-            w_lbl = SMALL_FONT.render("Width", True, WHITE)
-            h_lbl = SMALL_FONT.render("Height", True, WHITE)
+            w_lbl = SMALL_FONT.render("Width (Chunks)", True, WHITE)
+            h_lbl = SMALL_FONT.render("Height (Chunks)", True, WHITE)
             b_lbl = SMALL_FONT.render("Color", True, WHITE)
             o_lbl = SMALL_FONT.render("Offset", True, WHITE)
 
@@ -2136,8 +2141,8 @@ while running:
 
             if button_clicked(btn_confirm, mouse_pos, mouse_down):
                 if input_w_text and input_h_text:
-                    terrain_w = int(input_w_text)
-                    terrain_h = int(input_h_text)
+                    terrain_w = int(input_w_text) * 64
+                    terrain_h = int(input_h_text) * 64
                     base_height = int(input_base_text)
                     base_height = max(0, min(65535, base_height))
                     beach_offset = int(input_offset_text)

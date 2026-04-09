@@ -34,7 +34,7 @@ def read_and_display_hmap(file_path):
 
 if __name__ == "__main__":
     # Create a dummy .hmap file for demonstration purposes
-    dummy_file_name = "Test_folderrrrr/yyy/importance/1.hmap"
+    dummy_file_name = "Test_folderrrrr/yyy/importance/1.vimp"
 
 
     # Call the function with the dummy file
